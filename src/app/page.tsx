@@ -66,17 +66,17 @@ export default function Home() {
     <div className="min-h-screen bg-black text-white font-sans overflow-hidden flex flex-col bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-gray-900 to-black">
 
       {/* HEADER */}
-      <header className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-black/50 backdrop-blur-md z-20">
-        <div className="flex items-center gap-2">
-          <h1 className="text-2xl md:text-3xl font-orbitron font-bold text-transparent bg-clip-text bg-gradient-to-r from-neon-blue to-neon-purple drop-shadow-[0_0_10px_rgba(0,255,255,0.5)]">
+      <header className="flex flex-col md:flex-row items-center justify-between px-6 py-4 border-b border-white/10 bg-black/50 backdrop-blur-md z-20 gap-4">
+        <div className="flex items-center gap-2 w-full md:w-auto justify-center md:justify-start">
+          <h1 className="text-xl md:text-3xl font-orbitron font-bold text-transparent bg-clip-text bg-gradient-to-r from-neon-blue to-neon-purple drop-shadow-[0_0_10px_rgba(0,255,255,0.5)]">
             QUANTUM ROULETTE
           </h1>
           <div className="px-2 py-0.5 rounded border border-neon-blue/30 text-[0.625rem] text-neon-blue font-mono">V2.0</div>
         </div>
 
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-4 md:gap-6 flex-wrap justify-center md:justify-end flex-1 w-full md:w-auto">
           {/* Mode Toggle */}
-          <div className="hidden md:flex items-center gap-2 bg-black/40 p-1 rounded-lg border border-white/10">
+          <div className="flex items-center gap-2 bg-black/40 p-1 rounded-lg border border-white/10 order-2 md:order-none w-full md:w-auto justify-center">
             <button
               onClick={() => spinMode !== "simulated" && toggleSpinMode()}
               className={`px-3 py-1 rounded text-[0.625rem] font-bold transition-all ${spinMode === "simulated" ? "bg-neon-blue text-black shadow-[0_0_10px_rgba(0,255,255,0.5)]" : "text-white/40 hover:text-white"}`}
@@ -91,12 +91,12 @@ export default function Home() {
             </button>
           </div>
 
-          <div className="flex items-center gap-2 text-neon-gold font-mono text-xl font-bold bg-black/40 px-4 py-2 rounded-full border border-neon-gold/30 shadow-[0_0_15px_rgba(255,215,0,0.2)]">
+          <div className="flex items-center gap-2 text-neon-gold font-mono text-xl font-bold bg-black/40 px-4 py-2 rounded-full border border-neon-gold/30 shadow-[0_0_15px_rgba(255,215,0,0.2)] order-1 md:order-none">
             <Coins className="w-5 h-5" />
             <span>${balance.toLocaleString()}</span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 order-1 md:order-none">
             <QuantumFairnessModal />
             <button
               onClick={() => setIsMuted(!isMuted)}
@@ -136,30 +136,30 @@ export default function Home() {
 
           {/* CONTROLS */}
           <div className="flex flex-col items-center gap-4 w-full max-w-4xl z-10">
-            <div className="flex items-center gap-4 w-full justify-center">
+            <div className="flex flex-col md:flex-row items-center gap-4 w-full justify-center">
               <ChipSelector selectedChip={selectedChip} onSelect={setSelectedChip} />
               <SpinButton
                 onClick={handleSpin}
                 disabled={phase !== "betting" || currentBets.length === 0}
                 label={currentBets.length === 0 ? "PLACE BETS" : phase === "spinning" || phase === "collapsing" || phase === "resolving" ? "SPINNING..." : "SPIN"}
               />
-              {currentBets.length > 0 && phase === "betting" && (
+
+              {/* Secondary Buttons (Reserved Space) */}
+              <div className="flex gap-4 min-w-[200px] justify-center h-8 md:absolute md:right-0 md:top-1/2 md:-translate-y-1/2 lg:static lg:transform-none">
                 <button
                   onClick={clearBets}
-                  className="px-4 py-2 text-[0.625rem] text-red-400 hover:text-red-300 border border-red-500/30 rounded hover:bg-red-900/20 transition-colors uppercase font-mono tracking-widest"
+                  className={`px-4 py-2 text-[0.625rem] text-red-400 hover:text-red-300 border border-red-500/30 rounded hover:bg-red-900/20 transition-all uppercase font-mono tracking-widest ${currentBets.length > 0 && phase === "betting" ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}`}
                 >
                   Clear
                 </button>
-              )}
 
-              {currentBets.length === 0 && lastBets.length > 0 && phase === "betting" && (
                 <button
                   onClick={rebet}
-                  className="px-4 py-2 text-[0.625rem] text-neon-gold hover:text-yellow-200 border border-neon-gold/30 rounded hover:bg-neon-gold/10 transition-colors uppercase font-mono tracking-widest"
+                  className={`px-4 py-2 text-[0.625rem] text-neon-gold hover:text-yellow-200 border border-neon-gold/30 rounded hover:bg-neon-gold/10 transition-all uppercase font-mono tracking-widest ${currentBets.length === 0 && lastBets.length > 0 && phase === "betting" ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}`}
                 >
                   Rebet
                 </button>
-              )}
+              </div>
             </div>
 
             {/* BETTING BOARD */}
