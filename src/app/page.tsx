@@ -11,12 +11,13 @@ import { BettingBoard } from "@/components/betting/BettingBoard";
 import { ChipSelector } from "@/components/betting/ChipSelector";
 import { QuantumFairnessModal } from "@/components/QuantumFairnessModal";
 import { Volume2, VolumeX, Coins } from "lucide-react";
-import { ChipValue } from "@/types/game";
+import type { BetType, ChipValue } from "@/types/game";
 import { RED_NUMBERS } from "@/lib/game/payouts";
 import { WinParticles } from "@/components/WinParticles";
 import { StatsPanel } from "@/components/StatsPanel";
 import { VerificationModal } from "@/components/VerificationModal";
-import { SpinRecord } from "@/hooks/useGameEngine";
+import type { SpinRecord } from "@/lib/game/round";
+import { SOURCE_LABELS, type SpinMode } from "@/lib/quantum/quantum-engine";
 
 export default function Home() {
   const {
@@ -24,22 +25,28 @@ export default function Home() {
     currentBets,
     phase,
     lastWin,
-    winningBetIds,
     quantumResult,
     placeBet,
     runGameLoop,
     clearBets,
     history,
-    spinMode,
-    toggleSpinMode,
+    finishWheel,
+    error,
     rebet,
     lastBets,
     stats
   } = useGameEngine();
 
   const { playSound, isMuted, setIsMuted } = useSoundEffects();
+  const [spinMode, setSpinMode] = useState<SpinMode>("simulated");
+  const [accessCode, setAccessCode] = useState("");
   const [selectedChip, setSelectedChip] = useState<ChipValue>(10);
   const [selectedRecord, setSelectedRecord] = useState<SpinRecord | null>(null);
+
+  const betting = phase === "betting";
+  const canRebet = betting && currentBets.length === 0 && lastBets.length > 0
+    && lastBets.reduce((total, bet) => total + bet.amount, 0) <= balance;
+  const needsCode = spinMode === "hardware" && !accessCode.trim();
 
   // Sound triggers
   useEffect(() => {
@@ -51,7 +58,7 @@ export default function Home() {
     }
   }, [phase, lastWin, playSound]);
 
-  const handlePlaceBet = (type: any, value: any) => {
+  const handlePlaceBet = (type: BetType, value?: number) => {
     if (balance < selectedChip) return; // Optional visual feedback
     playSound("chip");
     placeBet(type, value, selectedChip);
@@ -59,7 +66,7 @@ export default function Home() {
 
   const handleSpin = () => {
     playSound("click");
-    runGameLoop();
+    void runGameLoop(spinMode, accessCode.trim());
   };
 
   return (
@@ -78,13 +85,17 @@ export default function Home() {
           {/* Mode Toggle */}
           <div className="flex items-center gap-2 bg-black/40 p-1 rounded-lg border border-white/10 order-2 md:order-none w-full md:w-auto justify-center">
             <button
-              onClick={() => spinMode !== "simulated" && toggleSpinMode()}
+              onClick={() => setSpinMode("simulated")}
+              disabled={!betting}
+              aria-pressed={spinMode === "simulated"}
               className={`px-3 py-1 rounded text-[0.625rem] font-bold transition-all ${spinMode === "simulated" ? "bg-neon-blue text-black shadow-[0_0_10px_rgba(0,255,255,0.5)]" : "text-white/40 hover:text-white"}`}
             >
               SIMULATED
             </button>
             <button
-              onClick={() => spinMode !== "hardware" && toggleSpinMode()}
+              onClick={() => setSpinMode("hardware")}
+              disabled={!betting}
+              aria-pressed={spinMode === "hardware"}
               className={`px-3 py-1 rounded text-[0.625rem] font-bold transition-all ${spinMode === "hardware" ? "bg-neon-pink text-black shadow-[0_0_10px_rgba(255,0,255,0.5)]" : "text-white/40 hover:text-white"}`}
             >
               HARDWARE
@@ -100,6 +111,7 @@ export default function Home() {
             <QuantumFairnessModal />
             <button
               onClick={() => setIsMuted(!isMuted)}
+              aria-label={isMuted ? "Unmute sound" : "Mute sound"}
               className="p-2 rounded-full hover:bg-white/10 text-white/70 hover:text-white transition-colors"
             >
               {isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
@@ -122,6 +134,7 @@ export default function Home() {
             <RouletteWheel
               targetNumber={quantumResult?.value ?? null}
               isSpinning={phase === "spinning"}
+              onSpinComplete={finishWheel}
             />
 
             {/* Result Overlay */}
@@ -136,18 +149,33 @@ export default function Home() {
 
           {/* CONTROLS */}
           <div className="flex flex-col items-center gap-4 w-full max-w-4xl z-10">
+            {spinMode === "hardware" && (
+              <label className="flex flex-wrap items-center gap-2 text-sm text-white/80">
+                Hardware access code
+                <input
+                  type="password"
+                  autoComplete="off"
+                  value={accessCode}
+                  disabled={!betting}
+                  onChange={(event) => setAccessCode(event.target.value)}
+                  className="rounded border border-white/25 bg-black px-3 py-1 text-white"
+                />
+              </label>
+            )}
+            {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
             <div className="flex flex-col md:flex-row items-center gap-4 w-full justify-center">
               <ChipSelector selectedChip={selectedChip} onSelect={setSelectedChip} />
               <SpinButton
                 onClick={handleSpin}
-                disabled={phase !== "betting" || currentBets.length === 0}
-                label={currentBets.length === 0 ? "PLACE BETS" : phase === "spinning" || phase === "collapsing" || phase === "resolving" ? "SPINNING..." : "SPIN"}
+                disabled={!betting || currentBets.length === 0 || needsCode}
+                label={currentBets.length === 0 ? "PLACE BETS" : !betting ? "SPINNING..." : "SPIN"}
               />
 
               {/* Secondary Buttons (Reserved Space) */}
               <div className="flex gap-4 min-w-[200px] justify-center h-8 md:absolute md:right-0 md:top-1/2 md:-translate-y-1/2 lg:static lg:transform-none">
                 <button
                   onClick={clearBets}
+                  disabled={!betting || currentBets.length === 0}
                   className={`px-4 py-2 text-[0.625rem] text-red-400 hover:text-red-300 border border-red-500/30 rounded hover:bg-red-900/20 transition-all uppercase font-mono tracking-widest ${currentBets.length > 0 && phase === "betting" ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}`}
                 >
                   Clear
@@ -155,7 +183,8 @@ export default function Home() {
 
                 <button
                   onClick={rebet}
-                  className={`px-4 py-2 text-[0.625rem] text-neon-gold hover:text-yellow-200 border border-neon-gold/30 rounded hover:bg-neon-gold/10 transition-all uppercase font-mono tracking-widest ${currentBets.length === 0 && lastBets.length > 0 && phase === "betting" ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}`}
+                  disabled={!canRebet}
+                  className={`px-4 py-2 text-[0.625rem] text-neon-gold hover:text-yellow-200 border border-neon-gold/30 rounded hover:bg-neon-gold/10 transition-all uppercase font-mono tracking-widest ${canRebet ? "opacity-100" : "opacity-0"}`}
                 >
                   Rebet
                 </button>
@@ -194,8 +223,10 @@ export default function Home() {
                   const isGreen = num === 0;
                   const borderColor = isGreen ? "border-neon-green text-neon-green" : isRed ? "border-neon-red text-neon-red" : "border-white text-white";
                   return (
-                    <div
+                    <button
+                      type="button"
                       key={i}
+                      aria-label={"Review spin " + num}
                       onClick={() => setSelectedRecord(spin)}
                       className={`
                                     w-10 h-10 flex-shrink-0 flex items-center justify-center rounded-full border-2 ${borderColor} 
@@ -211,7 +242,7 @@ export default function Home() {
                       `}>
                         {isWin ? "✓" : "×"}
                       </div>
-                    </div>
+                    </button>
                   );
                 })}
               </div>
@@ -224,19 +255,19 @@ export default function Home() {
               {phase === "collapsing" && (
                 <div className="space-y-1">
                   <p className="text-neon-purple">Collapsing wavefunction...</p>
-                  <p className="text-[0.625rem] text-white/30 uppercase">Entropy Source: {spinMode.toUpperCase()}</p>
+                  <p className="text-[0.625rem] text-white/30 uppercase">Entropy Source: {quantumResult && SOURCE_LABELS[quantumResult.source]}</p>
                 </div>
               )}
               {phase === "resolving" && lastWin > 0 && (
                 <div className="space-y-1">
                   <p className="text-neon-gold text-sm">WIN DETECTED: +${lastWin}</p>
-                  <p className="text-[0.625rem] text-white/30 uppercase italic">Verification: {quantumResult?.source} entropy used</p>
+                  <p className="text-[0.625rem] text-white/30 uppercase italic">Verification: {quantumResult && SOURCE_LABELS[quantumResult.source]}</p>
                 </div>
               )}
               {phase === "resolving" && lastWin === 0 && (
                 <div className="space-y-1">
                   <p className="text-gray-500">No payout.</p>
-                  <p className="text-[0.625rem] text-white/20 uppercase italic">Source: {quantumResult?.source}</p>
+                  <p className="text-[0.625rem] text-white/20 uppercase italic">Source: {quantumResult && SOURCE_LABELS[quantumResult.source]}</p>
                 </div>
               )}
             </div>

@@ -1,5 +1,4 @@
-fastapi
-uvicorn
-qiskit
-qiskit-ibm-runtime
-python-dotenv
+fastapi==0.165.0
+uvicorn==0.54.0
+qiskit==2.6.2
+qiskit-ibm-runtime==0.52.1

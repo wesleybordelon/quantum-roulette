@@ -1,207 +1,124 @@
-import { Bet, BetType } from "@/types/game";
-import { motion, AnimatePresence } from "framer-motion";
-import { useState } from "react";
+import { motion } from "framer-motion";
+import { useState, type MouseEventHandler } from "react";
+import { isWinningBet, RED_NUMBERS } from "@/lib/game/payouts";
+import type { Bet, BetType, GamePhase } from "@/types/game";
 
 interface BettingBoardProps {
     currentBets: Bet[];
     onPlaceBet: (type: BetType, value?: number) => void;
-    phase: string;
+    phase: GamePhase;
 }
 
-const ROWS = [
-    [3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36], // Top Row (visually)
-    [2, 5, 8, 11, 14, 17, 20, 23, 26, 29, 32, 35],
-    [1, 4, 7, 10, 13, 16, 19, 22, 25, 28, 31, 34]  // Bottom Row
-];
+const BOARD_ROWS = [
+    { type: "col1", offset: 3 },
+    { type: "col2", offset: 2 },
+    { type: "col3", offset: 1 },
+] as const;
 
-const RED_NUMBERS = [1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36];
+const DOZENS = [
+    ["1st12", "1st 12"], ["2nd12", "2nd 12"], ["3rd12", "3rd 12"],
+] as const;
 
-export function BettingBoard({ currentBets, onPlaceBet, phase }: BettingBoardProps) {
-    const isBetting = phase === "betting";
-    const [hoveredBet, setHoveredBet] = useState<BetType | null>(null);
+const OUTSIDE = [
+    ["1to18", "1–18"], ["even", "EVEN"], ["red", "RED"], ["black", "BLACK"], ["odd", "ODD"], ["19to36", "19–36"],
+] as const;
 
-    const handleBet = (type: BetType, value?: number) => {
-        if (!isBetting) return;
-        onPlaceBet(type, value);
-    };
+interface CellProps {
+    label: string | number;
+    accessibleName?: string;
+    amount: number;
+    disabled: boolean;
+    onClick: MouseEventHandler<HTMLButtonElement>;
+    onHover?: (hovered: boolean) => void;
+    style: string;
+}
 
-    const getChipAmountRaw = (type: BetType, value?: number) => {
-        return currentBets
-            .filter(b => b.type === type && b.value === value)
-            .reduce((sum, b) => sum + b.amount, 0);
-    };
-
-    const isNumberHighlighted = (num: number) => {
-        if (!hoveredBet) return false;
-
-        switch (hoveredBet) {
-            case "straight": return false; // Handled individually if needed, but usually hover on cell is enough
-            case "red": return RED_NUMBERS.includes(num);
-            case "black": return !RED_NUMBERS.includes(num) && num !== 0;
-            case "even": return num !== 0 && num % 2 === 0;
-            case "odd": return num !== 0 && num % 2 !== 0; // 0 is not odd or even in roulette betting
-            case "1to18": return num >= 1 && num <= 18;
-            case "19to36": return num >= 19 && num <= 36;
-            case "1st12": return num >= 1 && num <= 12;
-            case "2nd12": return num >= 13 && num <= 24;
-            case "3rd12": return num >= 25 && num <= 36;
-            case "col1": return num !== 0 && num % 3 === 0;   // 3, 6, 9...
-            case "col2": return num % 3 === 2; // 2, 5, 8...
-            case "col3": return num % 3 === 1; // 1, 4, 7...
-            default: return false;
-        }
-    };
-
-    const ChipOverlay = ({ type, value }: { type: BetType, value?: number }) => {
-        const amount = getChipAmountRaw(type, value);
-        if (amount === 0) return null;
-
-        return (
-            <AnimatePresence>
-                <motion.div
-                    initial={{ scale: 0, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    className="absolute inset-0 flex items-center justify-center pointer-events-none z-10"
-                >
-                    <div className="w-6 h-6 rounded-full bg-neon-gold border border-white text-[0.5625rem] md:text-[0.625rem] text-black font-bold flex items-center justify-center shadow-md leading-none">
-                        {amount >= 1000 ? (amount / 1000).toFixed(1) + 'k' : amount}
-                    </div>
-                </motion.div>
-            </AnimatePresence>
-        );
-    };
-
+function BetCell({ label, accessibleName, amount, disabled, onClick, onHover, style }: CellProps) {
     return (
-        <div className="relative overflow-x-auto p-2 w-full max-w-full">
-            <div className="flex flex-col min-w-[43.75rem] xl:min-w-full gap-1.5 md:gap-2 select-none">
-                {/* Main Grid Area */}
-                <div className="flex gap-1 md:gap-1.5 align-stretch">
-                    {/* Zero */}
-                    <div
-                        onClick={() => handleBet("straight", 0)}
-                        className={`
-                            w-8 md:w-12 bg-neon-green/20 border border-neon-green rounded-l hover:bg-neon-green/40 cursor-pointer
-                            flex items-center justify-center relative transition-colors group
-                        `}
-                    >
-                        <span className="group-hover:text-neon-green font-bold text-white text-sm md:text-lg rotate-[-90deg]">0</span>
-                        <ChipOverlay type="straight" value={0} />
-                    </div>
-
-                    {/* Numbers Grid + Column Bets */}
-                    <div className="flex flex-col gap-1 md:gap-1.5 flex-1">
-                        {ROWS.map((row, rowIndex) => {
-                            // Map visual rows to column logic:
-                            // Row 0 (3,6,9) -> col1
-                            // Row 1 (2,5,8) -> col2
-                            // Row 2 (1,4,7) -> col3
-                            const colType = rowIndex === 0 ? "col1" : rowIndex === 1 ? "col2" : "col3";
-
-                            return (
-                                <div key={rowIndex} className="flex gap-1 md:gap-1.5 h-10 md:h-12">
-                                    {row.map(num => {
-                                        const isRed = RED_NUMBERS.includes(num);
-                                        const highlighted = isNumberHighlighted(num);
-
-                                        return (
-                                            <div
-                                                key={num}
-                                                onClick={() => handleBet("straight", num)}
-                                                className={`
-                                                    flex-1 border border-white/20 flex items-center justify-center text-sm md:text-lg font-bold cursor-pointer relative
-                                                    ${highlighted ? "bg-neon-yellow text-black border-neon-yellow shadow-[0_0_15px_rgba(255,255,0,0.8)] z-20 scale-105 font-black" : ""}
-                                                    ${!highlighted && isRed ? "bg-neon-red/10 border-neon-red/30 hover:bg-neon-red/30" : ""}
-                                                    ${!highlighted && !isRed ? "bg-black/50 hover:bg-white/10" : ""}
-                                                    transition-all duration-150
-                                                `}
-                                            >
-                                                <span className={isRed ? "text-neon-red" : "text-white"}>{num}</span>
-                                                <ChipOverlay type="straight" value={num} />
-                                            </div>
-                                        );
-                                    })}
-
-                                    {/* 2 to 1 Column Bet for this row */}
-                                    <div
-                                        onClick={() => handleBet(colType)}
-                                        onMouseEnter={() => setHoveredBet(colType)}
-                                        onMouseLeave={() => setHoveredBet(null)}
-                                        className={`
-                                            w-8 md:w-12 border border-white/20 flex items-center justify-center cursor-pointer relative
-                                            text-[0.625rem] md:text-xs font-bold uppercase tracking-wider bg-white/5 hover:bg-white/10
-                                            transition-colors hover:border-white/50 text-white/50 hover:text-white
-                                        `}
-                                    >
-                                        <span className="rotate-[-90deg] whitespace-nowrap text-[0.6rem]">2 to 1</span>
-                                        <div className="absolute opacity-0 group-hover:opacity-100 bg-black text-white text-[8px] px-1 rounded -top-4 pointer-events-none whitespace-nowrap border border-white/20">
-                                            PAY 2:1
-                                        </div>
-                                        <ChipOverlay type={colType} />
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
-
-                {/* Bottom Bets (Dozens) */}
-                <div className="flex gap-1 md:gap-1.5 pl-8 md:pl-12 h-8 md:h-10 pr-8 md:pr-12">
-                    <BettingCell label="1st 12" onClick={() => handleBet("1st12")} onHover={(h: boolean) => setHoveredBet(h ? "1st12" : null)}>
-                        <ChipOverlay type="1st12" />
-                        <div className="absolute opacity-0 group-hover:opacity-100 bg-black text-white text-[8px] px-1 rounded -top-4 pointer-events-none whitespace-nowrap border border-white/20 z-20">PAY 2:1</div>
-                    </BettingCell>
-                    <BettingCell label="2nd 12" onClick={() => handleBet("2nd12")} onHover={(h: boolean) => setHoveredBet(h ? "2nd12" : null)}>
-                        <ChipOverlay type="2nd12" />
-                        <div className="absolute opacity-0 group-hover:opacity-100 bg-black text-white text-[8px] px-1 rounded -top-4 pointer-events-none whitespace-nowrap border border-white/20 z-20">PAY 2:1</div>
-                    </BettingCell>
-                    <BettingCell label="3rd 12" onClick={() => handleBet("3rd12")} onHover={(h: boolean) => setHoveredBet(h ? "3rd12" : null)}>
-                        <ChipOverlay type="3rd12" />
-                        <div className="absolute opacity-0 group-hover:opacity-100 bg-black text-white text-[8px] px-1 rounded -top-4 pointer-events-none whitespace-nowrap border border-white/20 z-20">PAY 2:1</div>
-                    </BettingCell>
-                </div>
-
-                {/* Bottom Bets (Low/High/Color) */}
-                <div className="flex gap-1 md:gap-1.5 pl-8 md:pl-12 h-8 md:h-10 pr-8 md:pr-12">
-                    <BettingCell label="1-18" onClick={() => handleBet("1to18")} onHover={(h: boolean) => setHoveredBet(h ? "1to18" : null)}>
-                        <ChipOverlay type="1to18" />
-                    </BettingCell>
-                    <BettingCell label="EVEN" onClick={() => handleBet("even")} onHover={(h: boolean) => setHoveredBet(h ? "even" : null)}>
-                        <ChipOverlay type="even" />
-                    </BettingCell>
-                    <BettingCell label="RED" color="bg-neon-red/20 text-neon-red" onClick={() => handleBet("red")} onHover={(h: boolean) => setHoveredBet(h ? "red" : null)}>
-                        <ChipOverlay type="red" />
-                    </BettingCell>
-                    <BettingCell label="BLACK" color="bg-black/80 text-white" onClick={() => handleBet("black")} onHover={(h: boolean) => setHoveredBet(h ? "black" : null)}>
-                        <ChipOverlay type="black" />
-                    </BettingCell>
-                    <BettingCell label="ODD" onClick={() => handleBet("odd")} onHover={(h: boolean) => setHoveredBet(h ? "odd" : null)}>
-                        <ChipOverlay type="odd" />
-                    </BettingCell>
-                    <BettingCell label="19-36" onClick={() => handleBet("19to36")} onHover={(h: boolean) => setHoveredBet(h ? "19to36" : null)}>
-                        <ChipOverlay type="19to36" />
-                    </BettingCell>
-                </div>
-            </div>
-        </div>
+        <button
+            type="button"
+            aria-label={accessibleName}
+            disabled={disabled}
+            onClick={onClick}
+            onMouseEnter={() => onHover?.(true)}
+            onMouseLeave={() => onHover?.(false)}
+            onFocus={() => onHover?.(true)}
+            onBlur={() => onHover?.(false)}
+            className={style + " relative flex items-center justify-center border text-center font-bold focus-visible:z-20 focus-visible:ring-2 focus-visible:ring-neon-blue disabled:cursor-default"}
+        >
+            {label}
+            {amount > 0 && (
+                <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} aria-hidden="true"
+                    className="pointer-events-none absolute z-10 flex h-6 w-6 items-center justify-center rounded-full border border-white bg-neon-gold text-[0.6rem] leading-none text-black">
+                    {amount >= 1000 ? (amount / 1000).toFixed(1) + "k" : amount}
+                </motion.span>
+            )}
+        </button>
     );
 }
 
-function BettingCell({ label, flex = true, color, onClick, onHover, children }: any) {
+function cellKey(type: BetType, value?: number) {
+    return type + ":" + (value ?? "");
+}
+
+export function BettingBoard({ currentBets, onPlaceBet, phase }: BettingBoardProps) {
+    const [hover, setHover] = useState<BetType | null>(null);
+    const disabled = phase !== "betting";
+    const amounts = new Map<string, number>();
+    for (const { type, value, amount } of currentBets) {
+        const key = cellKey(type, value);
+        amounts.set(key, (amounts.get(key) ?? 0) + amount);
+    }
+
+    const props = (type: BetType, value?: number) => ({
+        amount: amounts.get(cellKey(type, value)) ?? 0,
+        disabled,
+        onClick: () => onPlaceBet(type, value),
+        onHover: type === "straight" ? undefined : (active: boolean) => setHover(active ? type : null),
+    });
+
+    function pocketStyle(value: number) {
+        if (!disabled && hover && isWinningBet({ type: hover }, value)) {
+            return "border-neon-yellow bg-neon-yellow text-black";
+        }
+        return RED_NUMBERS.includes(value)
+            ? "border-neon-red/30 bg-neon-red/10 text-neon-red hover:bg-neon-red/30"
+            : "border-white/20 bg-black/50 text-white hover:bg-white/10";
+    }
+
     return (
-        <div
-            onClick={onClick}
-            onMouseEnter={() => onHover && onHover(true)}
-            onMouseLeave={() => onHover && onHover(false)}
-            className={`
-                ${flex ? "flex-1" : ""}
-                border border-white/20 flex items-center justify-center cursor-pointer relative
-                text-[0.625rem] md:text-xs font-bold uppercase tracking-wider
-                ${color ? color : "bg-white/5 hover:bg-white/10"}
-                transition-colors hover:border-white/50 group
-            `}
-        >
-            {label}
-            {children}
+        <div className="relative w-full max-w-full overflow-x-auto p-2">
+            <div className="flex min-w-[43.75rem] select-none flex-col gap-1.5 md:gap-2 xl:min-w-full">
+                <div className="flex gap-1 md:gap-1.5">
+                    <BetCell label={0} accessibleName="Bet on zero"
+                        style="w-8 rounded-l border-neon-green bg-neon-green/20 text-neon-green hover:bg-neon-green/40 md:w-12"
+                        {...props("straight", 0)} />
+                    <div className="flex flex-1 flex-col gap-1 md:gap-1.5">
+                        {BOARD_ROWS.map(({ type, offset }, row) => (
+                            <div key={type} className="flex h-10 gap-1 md:h-12 md:gap-1.5">
+                                {Array.from({ length: 12 }, (_, column) => column * 3 + offset).map(value => (
+                                    <BetCell key={value} label={value} accessibleName={"Bet on " + value}
+                                        style={"flex-1 text-sm md:text-lg " + pocketStyle(value)}
+                                        {...props("straight", value)} />
+                                ))}
+                                <BetCell label="2 to 1" accessibleName={"Column " + (row + 1) + ", pays 2 to 1"}
+                                    style="w-8 border-white/20 bg-white/5 text-[0.55rem] text-white hover:bg-white/10 md:w-12"
+                                    {...props(type)} />
+                            </div>
+                        ))}
+                    </div>
+                </div>
+                {[DOZENS, OUTSIDE].map((row, index) => (
+                    <div key={index} className="flex h-8 gap-1 px-8 md:h-10 md:gap-1.5 md:px-12">
+                        {row.map(([type, label]) => (
+                            <BetCell key={type} label={label}
+                                style={"flex-1 border-white/20 text-xs hover:bg-white/10 " +
+                                    (type === "red" ? "bg-neon-red/20 text-neon-red" : "bg-white/5 text-white")}
+                                {...props(type)} />
+                        ))}
+                    </div>
+                ))}
+            </div>
         </div>
     );
 }

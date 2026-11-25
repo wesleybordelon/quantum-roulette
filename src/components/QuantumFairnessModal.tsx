@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { Info, ShieldCheck, RefreshCw } from "lucide-react";
+import { ShieldCheck, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import Portal from "./Portal";
 
@@ -39,7 +39,7 @@ export function QuantumFairnessModal() {
 
                                 <div className="space-y-4 text-sm text-gray-300 leading-relaxed font-mono">
                                     <p>
-                                        This game utilizes <strong>True Quantum Randomness</strong> derived from two distinct sources depending on your selected mode:
+                                        The game shows which source produced each spin.
                                     </p>
 
                                     <div className="space-y-2">
@@ -53,7 +53,7 @@ export function QuantumFairnessModal() {
                                         <div className="bg-black/50 p-3 rounded border border-neon-pink/20">
                                             <div className="text-neon-pink text-xs font-bold mb-1 uppercase">Hardware Mode</div>
                                             <p className="text-[0.6875rem] opacity-70">
-                                                Entropy is sourced from real **IBM Quantum** hardware backends. Results are fetched via high-performance batching to ensure zero-latency gameplay.
+                                                IBM Quantum measurements arrive in batches. While a batch is pending, the game labels locally generated spins as fallback results.
                                             </p>
                                         </div>
                                     </div>
@@ -64,7 +64,7 @@ export function QuantumFairnessModal() {
                                             <span>Rejection Sampling</span>
                                         </div>
                                         <p className="text-[0.625rem] opacity-60 italic">
-                                            The quantum state space spans 0-63. If a measurement {">"} 36 occurs, it is rejected and re-measured instantly, ensuring a perfectly fair 1/37 probability for every roulette slot.
+                                            The quantum state space spans 0-63. If a measurement {">"} 36 occurs, it is rejected and re-measured instantly, giving each slot an equal chance in the simulator.
                                         </p>
                                     </div>
                                 </div>

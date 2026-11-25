@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { motion, useAnimation } from "framer-motion";
+import { useEffect, useRef } from "react";
+import { motion, useAnimation, useReducedMotion } from "framer-motion";
+import { RED_NUMBERS } from "@/lib/game/payouts";
 
 // European Roulette number sequence (clockwise)
 const NUMBERS = [
@@ -10,7 +11,6 @@ const COLORS: Record<number, string> = {
     0: "green",
 };
 // Assign Red/Black
-const RED_NUMBERS = [1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36];
 NUMBERS.forEach(n => {
     if (n !== 0) {
         COLORS[n] = RED_NUMBERS.includes(n) ? "red" : "black";
@@ -26,54 +26,38 @@ interface RouletteWheelProps {
 export function RouletteWheel({ isSpinning, targetNumber, onSpinComplete }: RouletteWheelProps) {
     const controls = useAnimation();
     const ballControls = useAnimation();
-    const [rotation, setRotation] = useState(0);
-    const [ballRotation, setBallRotation] = useState(0);
+    const rotation = useRef(0);
+    const ballRotation = useRef(0);
+    const reduceMotion = useReducedMotion();
 
     useEffect(() => {
-        if (isSpinning && targetNumber !== null) {
-            // ... (keep existing wheel logic setup) ...
-            const segmentAngle = 360 / 37;
-            const targetIndex = NUMBERS.indexOf(targetNumber);
-            const currentAngleOfTarget = targetIndex * segmentAngle;
+        if (!isSpinning || targetNumber === null) return;
 
-            // Wheel rotates Clockwise to align target to top (0deg)
-            const alignRotation = (360 - currentAngleOfTarget) % 360;
-            const totalRotation = rotation + (360 * 5) + alignRotation;
-            const currentMod = rotation % 360;
-            const diff = alignRotation - currentMod;
-            const positiveDiff = diff >= 0 ? diff : 360 + diff;
-            const finalRotation = rotation + (360 * 5) + positiveDiff;
+        const segmentAngle = 360 / 37;
+        const alignRotation = (360 - NUMBERS.indexOf(targetNumber) * segmentAngle) % 360;
+        const turn = (alignRotation - rotation.current % 360 + 360) % 360;
+        const finalRotation = rotation.current + 360 * 5 + turn;
+        const finalBallRotation = ballRotation.current - 360 * 10;
+        const duration = reduceMotion ? 0 : 5;
+        const transition = { duration, ease: "circOut" } as const;
+        let cancelled = false;
 
-            // 1. Wheel Animation
-            controls.start({
-                rotate: finalRotation,
-                transition: {
-                    duration: 5, // Longer spin
-                    ease: "circOut",
-                    type: "tween"
-                }
-            }).then(() => {
-                setRotation(finalRotation);
-                onSpinComplete?.();
-            });
+        void Promise.all([
+            controls.start({ rotate: finalRotation, transition }),
+            ballControls.start({ rotate: finalBallRotation, transition }),
+        ]).then(() => {
+            if (cancelled) return;
+            rotation.current = finalRotation;
+            ballRotation.current = finalBallRotation;
+            onSpinComplete?.();
+        });
 
-            // 2. Ball Animation (Counter-Rotating)
-            // Just like wheel, accumulate rotation but in negative direction
-            const finalBallRotation = ballRotation - (360 * 10);
-
-            ballControls.start({
-                rotate: finalBallRotation,
-                transition: {
-                    duration: 5, // Match wheel duration
-                    ease: "circOut", // Same ease to sync stop
-                    type: "tween"
-                }
-            }).then(() => {
-                setBallRotation(finalBallRotation);
-            });
-
-        }
-    }, [isSpinning, targetNumber, controls, ballControls]); // eslint-disable-line react-hooks/exhaustive-deps
+        return () => {
+            cancelled = true;
+            controls.stop();
+            ballControls.stop();
+        };
+    }, [isSpinning, targetNumber, controls, ballControls, onSpinComplete, reduceMotion]);
 
     return (
         <div className="relative w-80 h-80 md:w-96 md:h-96 rounded-full border-4 border-neon-gold shadow-[0_0_50px_rgba(255,215,0,0.2)] bg-black flex items-center justify-center overflow-hidden">

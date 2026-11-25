@@ -1,11 +1,10 @@
 import { motion } from "framer-motion";
+import { RED_NUMBERS } from "@/lib/game/payouts";
 import { QuantumSpinResult } from "@/lib/quantum/quantum-engine";
 
 interface ResultDisplayProps {
     result: QuantumSpinResult | null;
 }
-
-const RED_NUMBERS = [1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36];
 
 export function ResultDisplay({ result }: ResultDisplayProps) {
     if (!result) return <div className="h-24" />; // Spacer

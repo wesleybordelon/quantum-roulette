@@ -1,0 +1,30 @@
+[Unit]
+Description=Quantum Roulette IBM Quantum backend
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+User=pi-quantum
+Group=pi-quantum
+WorkingDirectory=/srv/quantum-roulette/current
+EnvironmentFile=-/etc/quantum-roulette/ibm.env
+EnvironmentFile=/etc/quantum-roulette/hardware.env
+StateDirectory=quantum-roulette-api
+Environment=HOME=/var/lib/quantum-roulette-api
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=OPENBLAS_NUM_THREADS=1
+Environment=OMP_NUM_THREADS=1
+Environment=RAYON_NUM_THREADS=1
+ExecStart=/srv/quantum-roulette/current/.venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 8100
+Restart=on-failure
+RestartSec=5s
+MemoryHigh=250M
+MemoryMax=360M
+Nice=5
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+
+[Install]
+WantedBy=multi-user.target

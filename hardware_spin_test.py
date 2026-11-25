@@ -1,42 +1,23 @@
+"""Explicitly submit one IBM Quantum shot for an operator smoke test."""
+
 from qiskit import QuantumCircuit, transpile
-from qiskit_ibm_runtime import QiskitRuntimeService, SamplerV2 as Sampler
+from qiskit_ibm_runtime import SamplerV2
 
-service = QiskitRuntimeService(
-    channel="ibm_quantum_platform"
-)
+from backend.quantum_service import connect_backend
 
-backend_name = "ibm_fez" 
-print(f"Getting backend: {backend_name}")
-backend = service.backend(backend_name)
 
-qc = QuantumCircuit(6)
-qc.h(range(6))
-qc.measure_all()
+def main():
+    backend = connect_backend()
+    circuit = QuantumCircuit(6)
+    circuit.h(range(6))
+    circuit.measure_all()
+    isa_circuit = transpile(circuit, backend=backend, optimization_level=1, num_processes=1)
+    job = SamplerV2(mode=backend).run([isa_circuit], shots=1)
+    print(f"Submitted {job.job_id()} on {backend.name}")
+    bitstring = job.result(timeout=120)[0].data.meas.get_bitstrings()[0]
+    value = int(bitstring, 2)
+    print(f"{bitstring}: {value}" if value <= 36 else f"{bitstring}: rejected")
 
-print("Transpiling circuit for backend...")
-isa_circuit = transpile(qc, backend=backend)
 
-print("Submitting job...")
-
-sampler = Sampler(mode=backend)
-job = sampler.run([(isa_circuit, None, 1)]) 
-
-print(f"Job ID: {job.job_id()}")
-print("Waiting for result...")
-result = job.result()
-
-counts = result[0].data.meas.get_counts()
-bitstring = list(counts.keys())[0]
-
-print("Raw counts:", counts)
-bitstring = list(counts.keys())[0]
-
-decimal = int(bitstring, 2)
-
-print("Raw quantum bits:", bitstring)
-print("Decimal value:", decimal)
-
-if decimal <= 36:
-    print("Roulette number:", decimal)
-else:
-    print("Rejected (>36), reroll needed")
+if __name__ == "__main__":
+    main()

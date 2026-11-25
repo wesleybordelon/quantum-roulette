@@ -8,10 +8,10 @@ export function useSoundEffects() {
     const [isMuted, setIsMuted] = useState(false);
     const audioContextRef = useRef<AudioContext | null>(null);
 
-    const initAudio = () => {
+    const initAudio = useCallback(() => {
         if (!audioContextRef.current) {
-            // @ts-ignore - Handle browser differences if strictly needed, but standard usually fine
-            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            const browser = window as Window & { webkitAudioContext?: typeof globalThis.AudioContext };
+            const AudioContext = window.AudioContext || browser.webkitAudioContext;
             if (AudioContext) {
                 audioContextRef.current = new AudioContext();
             }
@@ -19,7 +19,7 @@ export function useSoundEffects() {
         if (audioContextRef.current?.state === "suspended") {
             audioContextRef.current.resume();
         }
-    };
+    }, []);
 
     const playSound = useCallback((type: SoundType) => {
         if (isMuted) return;
@@ -106,7 +106,7 @@ export function useSoundEffects() {
         } catch (e) {
             console.error("Audio error", e);
         }
-    }, [isMuted]);
+    }, [initAudio, isMuted]);
 
     return { playSound, isMuted, setIsMuted };
 }

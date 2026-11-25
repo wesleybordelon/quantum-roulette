@@ -1,18 +1,7 @@
-# from qiskit_ibm_runtime import QiskitRuntimeService
+"""Check IBM credentials without submitting a quantum job."""
 
-# service = QiskitRuntimeService()
-# print(service.backends())
+from backend.check_credentials import main
 
-from qiskit_ibm_runtime import QiskitRuntimeService
 
-print("Starting Qiskit test...")
-
-service = QiskitRuntimeService()
-
-print("Service initialized successfully")
-
-backends = service.backends()
-
-print("Available backends:")
-for backend in backends:
-    print("-", backend.name)
+if __name__ == "__main__":
+    main()

@@ -7,9 +7,10 @@ interface StatsPanelProps {
     cold: number[];
     redPct: number;
     blackPct: number;
+    zeroPct: number;
 }
 
-export function StatsPanel({ hot, cold, redPct, blackPct }: StatsPanelProps) {
+export function StatsPanel({ hot, cold, redPct, blackPct, zeroPct }: StatsPanelProps) {
     return (
         <div className="flex flex-col gap-3 p-3 bg-black/40 border border-white/5 rounded-xl text-[0.6rem] font-mono w-full">
             <div className="flex justify-between items-center text-white/50 border-b border-white/5 pb-1">
@@ -42,10 +43,12 @@ export function StatsPanel({ hot, cold, redPct, blackPct }: StatsPanelProps) {
             <div className="w-full h-1 bg-gray-800 rounded-full overflow-hidden flex mt-1">
                 <div className="h-full bg-neon-red shadow-[0_0_5px_currentColor]" style={{ width: `${redPct}%` }} />
                 <div className="h-full bg-white/20" style={{ width: `${blackPct}%` }} />
+                <div className="h-full bg-neon-green" style={{ width: `${zeroPct}%` }} />
             </div>
             <div className="flex justify-between text-white/30 text-[0.5rem]">
-                <span>RED {redPct}%</span>
-                <span>BLACK {blackPct}%</span>
+                <span>RED {Math.round(redPct)}%</span>
+                <span>ZERO {Math.round(zeroPct)}%</span>
+                <span>BLACK {Math.round(blackPct)}%</span>
             </div>
         </div>
     );

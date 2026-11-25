@@ -1,14 +1,11 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  allowedDevOrigins: ["localhost:3000", "192.168.4.25:3000", "172.31.176.1:3000"],
+  experimental: { cpus: 1 },
+  images: { unoptimized: true },
   async rewrites() {
-    return [
-      {
-        source: "/api/quantum-spin",
-        destination: "http://127.0.0.1:8000/quantum-spin",
-      },
-    ];
+    const backend = process.env.QUANTUM_API_ORIGIN ?? "http://127.0.0.1:8100";
+    return [{ source: "/api/quantum-spin", destination: backend + "/quantum-spin" }];
   },
 };
 

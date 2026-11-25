@@ -1,6 +1,5 @@
-import { motion } from "framer-motion";
-import { Cpu, Activity } from "lucide-react";
-import { QuantumSpinResult } from "@/lib/quantum/quantum-engine";
+import { Cpu } from "lucide-react";
+import { SOURCE_LABELS, type QuantumSpinResult } from "@/lib/quantum/quantum-engine";
 import { GamePhase } from "@/types/game";
 import { useEffect, useState } from "react";
 
@@ -13,19 +12,11 @@ export function QuantumCircuitSimulator({ phase, result }: QuantumCircuitSimulat
     // We want to visualize sequential collapse when in 'collapsing' phase
     const [displayedBitstring, setDisplayedBitstring] = useState("000000");
 
-    // Reset when idle/betting
-    useEffect(() => {
-        if (phase === "idle" || phase === "betting") {
-            setDisplayedBitstring("000000");
-        }
-    }, [phase]);
-
     // Handle "Collapsing" animation
     useEffect(() => {
         if (phase === "collapsing" && result) {
             // Animate reveal q5 -> q0 over 2 seconds
             const targetParams = result.bitstring; // e.g. "101010"
-            let current = "......"; // or randomized
 
             let step = 0;
             const interval = setInterval(() => {
@@ -108,15 +99,15 @@ export function QuantumCircuitSimulator({ phase, result }: QuantumCircuitSimulat
 
                     {/* Main Bitstring Display */}
                     <div className="font-mono text-xl md:text-2xl text-white tracking-[0.5em] text-center w-full my-2">
-                        |{displayedBitstring}⟩
+                        |{phase === "idle" || phase === "betting" ? "000000" : displayedBitstring}⟩
                     </div>
 
                     {/* Entropy/Attempts info */}
                     {result && (phase === "resolving" || phase === "collapsing") && (
                         <div className="w-full flex justify-between text-[0.625rem] font-mono text-white/30 border-t border-white/5 pt-1 mt-1">
-                            <span>ENTROPY: 6.0 bits ({result.source})</span>
-                            <span className={result.attempts > 1 ? "text-neon-red" : ""}>
-                                {result.source === "hardware" ? "BATCHED" : `REJECTIONS: ${result.attempts - 1}`}
+                            <span>{SOURCE_LABELS[result.source]}</span>
+                            <span className={(result.attempts ?? 0) > 1 ? "text-neon-red" : ""}>
+                                {result.source === "hardware" ? "BATCHED" : result.attempts ? "REJECTIONS: " + (result.attempts - 1) : ""}
                             </span>
                         </div>
                     )}

@@ -12,7 +12,7 @@ Unlike traditional games that use pseudo-random number generators (PRNG), this a
 ## 🚀 Features
 - **Comprehensive Betting**: Supports Straight numbers, Outside bets (Red/Black, Even/Odd, Dozens), and **Column (2:1)** bets.
 - **Dynamic Highlighting**: Visual feedback on the board when hovering over outside bets.
-- **Session History**: A persistent log of the last 10 winning numbers with color-coding.
+- **Session History**: A session log of the last 500 outcomes with color-coding.
 - **Cyberpunk UI**: Built with a sleek neon aesthetic using **Orbitron** typography and TailwindCSS v4.
 - **Mobile Optimized**: Responsive design with horizontal scrolling for the betting board and touch-friendly chip selectors.
 - **Audio Experience**: Synthesized retro sound effects for spins, wins, and chip placement.
@@ -46,10 +46,27 @@ npm run dev
 The dev server is configured to listen on `0.0.0.0`. To test on a mobile device on the same Wi-Fi:
 1. Find your LAN IP (e.g., `192.168.x.x`).
 2. Visit `http://<YOUR_IP>:3000`.
-3. Ensure your IP is added to `next.config.ts` under `allowedDevOrigins` if you encounter CORS issues.
+## Hardware access
 
-## 🧪 Experimental: Hardware Integration
-The root directory contains `hardware_spin_test.py`. This script demonstrates how to fetch a "True Quantum" spin using **IBM Quantum Hardware** (via Qiskit Runtime V2). It requires a valid IBM Quantum API token and the `qiskit` / `qiskit-ibm-runtime` Python packages.
+Run the API with the project’s Python dependencies installed:
+
+    python -m uvicorn backend.main:app --host 127.0.0.1 --port 8100
+
+Set the server-side variables using your service manager or shell:
+
+- `IBM_QUANTUM_API_KEY` authenticates to IBM. The app looks for an Open plan instance by default.
+- `IBM_QUANTUM_INSTANCE` optionally selects a specific instance by CRN.
+- `QUANTUM_ACCESS_CODE` is the separate password players enter when using Hardware mode.
+
+The browser sends an authenticated spin request to the same site. IBM results are served in shot order. While a batch is pending, locally generated results are labeled as fallback spins.
+
+The Pi deployment uses a separate frontend and API service with a root-owned release. Rebuild from a Git archive with `deploy/pi-hole/install.sh`. The installer keeps existing IBM settings and rolls back the services if the new release fails its HTTP checks.
+
+    npm test
+    npm run lint
+    python -m unittest discover -s tests -p 'test_*.py'
+
+`python -m backend.check_credentials` verifies IBM access without submitting a job. Running `hardware_spin_test.py` explicitly submits one shot.
 
 ## 📁 Project Structure
 - `/src/lib/quantum`: Core logic for the quantum simulator.

@@ -1,0 +1,25 @@
+[Unit]
+Description=Quantum Roulette LAN web app
+Wants=network-online.target
+After=network-online.target quantum-roulette-api.service
+
+[Service]
+User=qr-web
+Group=qr-web
+WorkingDirectory=/srv/quantum-roulette/current
+Environment=NODE_ENV=production
+Environment=NEXT_TELEMETRY_DISABLED=1
+Environment=NODE_OPTIONS=--max-old-space-size=250
+ExecStart=/opt/pi-games-node/bin/node /srv/quantum-roulette/current/node_modules/next/dist/bin/next start --hostname 192.168.4.44 --port 3101
+Restart=on-failure
+RestartSec=5s
+MemoryHigh=280M
+MemoryMax=380M
+Nice=5
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+
+[Install]
+WantedBy=multi-user.target

@@ -1,97 +1,128 @@
+import logging
 import os
+import queue
 import threading
 import time
-import queue
-from typing import List, Optional
-from qiskit import QuantumCircuit, transpile
-from qiskit_ibm_runtime import QiskitRuntimeService, SamplerV2 as Sampler
-from dotenv import load_dotenv
+from secrets import randbelow
 
-load_dotenv()
+from qiskit import QuantumCircuit, transpile
+from qiskit_ibm_runtime import QiskitRuntimeService, SamplerV2
+
+log = logging.getLogger("uvicorn.error")
+BATCH_SIZE = 32
+LOW_WATER_MARK = 10
+RETRY_SECONDS = 60
+RESULT_TIMEOUT = 120
+
+
+def connect_backend():
+    api_key = os.environ["IBM_QUANTUM_API_KEY"]
+    instance = os.environ.get("IBM_QUANTUM_INSTANCE") or None
+    options = {"token": api_key, "instance": instance, "channel": "ibm_quantum_platform"}
+    if instance is None:
+        options["plans_preference"] = ["open"]
+    service = QiskitRuntimeService(**options)
+    backend_name = os.environ.get("IBM_QUANTUM_BACKEND")
+    if backend_name:
+        backend = service.backend(backend_name)
+        if backend.num_qubits < 6 or backend.configuration().simulator:
+            raise ValueError("The selected backend must be a hardware device with six qubits")
+        return backend
+    return service.least_busy(min_num_qubits=6, operational=True, simulator=False)
+
 
 class QuantumEntropyService:
     def __init__(self):
-        self.token = os.getenv("token")
-        self.use_simulator = os.getenv("USE_SIMULATOR", "false").lower() == "true"
-        self.backend_name = os.getenv("IBM_BACKEND", "ibm_fez")
-        self.batch_size = 32
-        self.threshold = 10
-        self.entropy_queue = queue.Queue()
-        self.is_refilling = False
+        self.configured = bool(os.environ.get("IBM_QUANTUM_API_KEY"))
+        self.backend = None
+        self.spins = queue.Queue()
         self.lock = threading.Lock()
-        
-        try:
-            self.service = QiskitRuntimeService(channel="ibm_quantum_platform", token=self.token)
-            self.backend = self.service.backend(self.backend_name if not self.use_simulator else "ibmq_qasm_simulator")
-            
-            # Pre-warm the queue immediately on startup
-            print("Pre-warming entropy queue...")
-            threading.Thread(target=self._refill_queue, daemon=True).start()
-        except Exception as e:
-            print(f"Error initializing Qiskit: {e}")
-            self.use_simulator = True
-            print("Falling back to local simulation logic or simulator backend if possible.")
+        self.connecting = False
+        self.refilling = False
+        self.next_connect_at = 0
+        self.next_refill_at = 0
+        self.pending_job = None
 
-    def get_spin(self) -> dict:
-        # 1. Trigger refill in background if below threshold
-        if self.entropy_queue.qsize() < self.threshold and not self.is_refilling:
-            threading.Thread(target=self._refill_queue, daemon=True).start()
-            
-        # 2. Try to get from queue
-        try:
-            return self.entropy_queue.get_nowait()
-        except queue.Empty:
-            # Cold start or hardware delay fallback
-            print("Queue empty, providing simulator fallback for this spin.")
-            import random
-            val = random.randint(0, 36)
-            return {
-                "bitstring": bin(val)[2:].zfill(6),
-                "value": val,
-                "source": "simulator-fallback",
-                "jobId": "simulated-fallback-job"
-            }
-
-    def _refill_queue(self):
+    def ensure_connection(self):
         with self.lock:
-            if self.is_refilling:
+            if not self.configured or self.backend is not None or self.connecting:
                 return
-            self.is_refilling = True
-        
+            if time.monotonic() < self.next_connect_at:
+                return
+            self.connecting = True
+        threading.Thread(target=self._connect, daemon=True).start()
+
+    def _connect(self):
         try:
-            print(f"Refilling entropy queue (target: {self.batch_size} shots)...")
-            qc = QuantumCircuit(6)
-            qc.h(range(6))
-            qc.measure_all()
-            
-            # Hardware execution
-            isa_circuit = transpile(qc, backend=self.backend)
-            sampler = Sampler(mode=self.backend)
-            job = sampler.run([(isa_circuit, None, self.batch_size)])
-            current_job_id = job.job_id() # Capture ID
-            result = job.result()
-            
-            counts = result[0].data.meas.get_counts()
-            
-            valid_count = 0
-            for bitstring, count in counts.items():
-                decimal = int(bitstring, 2)
-                if decimal <= 36:
-                    for _ in range(count):
-                        self.entropy_queue.put({
-                            "bitstring": bitstring,
-                            "value": decimal,
-                            "source": "hardware" if not self.use_simulator else "simulator",
-                            "jobId": current_job_id 
-                        })
-                        valid_count += 1
-            
-            print(f"Refill complete. Added {valid_count} valid numbers.")
-            
-        except Exception as e:
-            print(f"Refill failed: {e}")
+            self.backend = connect_backend()
+            log.info("IBM Quantum backend selected: %s", self.backend.name)
+        except Exception as error:
+            log.warning("IBM Quantum backend unavailable (%s)", type(error).__name__)
         finally:
             with self.lock:
-                self.is_refilling = False
+                self.next_connect_at = time.monotonic() + RETRY_SECONDS
+                self.connecting = False
 
-quantum_service = QuantumEntropyService()
+    def get_spin(self):
+        self.ensure_connection()
+        try:
+            spin = self.spins.get_nowait()
+        except queue.Empty:
+            value = randbelow(37)
+            spin = {"value": value, "bitstring": f"{value:06b}", "source": "pseudo-fallback"}
+
+        with self.lock:
+            should_refill = (
+                self.backend is not None
+                and self.spins.qsize() < LOW_WATER_MARK
+                and not self.refilling
+                and time.monotonic() >= self.next_refill_at
+            )
+            if should_refill:
+                self.refilling = True
+        if should_refill:
+            threading.Thread(target=self._refill, daemon=True).start()
+        return spin
+
+    def _refill(self):
+        try:
+            if self.pending_job is None:
+                circuit = QuantumCircuit(6)
+                circuit.h(range(6))
+                circuit.measure_all()
+                isa_circuit = transpile(circuit, backend=self.backend, optimization_level=1, num_processes=1)
+                self.pending_job = SamplerV2(mode=self.backend).run([isa_circuit], shots=BATCH_SIZE)
+                log.info("Submitted IBM Quantum job %s", self.pending_job.job_id())
+
+            job = self.pending_job
+            bitstrings = job.result(timeout=RESULT_TIMEOUT)[0].data.meas.get_bitstrings()
+            self.pending_job = None
+            for bitstring in bitstrings:
+                value = int(bitstring, 2)
+                if value <= 36:
+                    self.spins.put({
+                        "value": value,
+                        "bitstring": bitstring,
+                        "source": "hardware",
+                        "jobId": job.job_id(),
+                    })
+        except Exception as error:
+            log.warning("IBM Quantum batch unavailable (%s)", type(error).__name__)
+            self._recover_job()
+        finally:
+            with self.lock:
+                self.next_refill_at = time.monotonic() + RETRY_SECONDS
+                self.refilling = False
+
+    def _recover_job(self):
+        if self.pending_job is not None:
+            try:
+                if not self.pending_job.in_final_state():
+                    return
+            except Exception:
+                # Keep retrying the existing job if its state could not be confirmed.
+                return
+        self.pending_job = None
+        with self.lock:
+            self.backend = None
+            self.next_connect_at = time.monotonic() + RETRY_SECONDS
